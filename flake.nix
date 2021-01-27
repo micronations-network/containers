@@ -115,7 +115,6 @@
         fi
 
         ZONE_DIR=$1
-        ARGS=$@
 
         for cmd in jq curl sed cut docker find; do
           if ! command -v $cmd &> /dev/null; then
@@ -144,12 +143,6 @@
         }
 
         function main () {
-          local self=$(realpath $0)
-          curl --fail https://b.j2.lc/update-m-tld.sh > $self.tmp
-          chmod +x $self.tmp
-          mv $self.tmp $self
-          exec $self $ARGS
-
           mkdir -p $ZONE_DIR/zones
 
           curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $ZONE_DIR/zones/m.zone
