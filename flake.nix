@@ -81,6 +81,9 @@
         m-tld-update-script
       ];
 
+      hydraJobs.m-tld-primary.x86_64-linux = self.packages.x86_64-linux.m-tld-primary;
+      hydraJobs.m-tld-update-script.x86_64-linux = self.packages.x86_64-linux.m-tld-update-script;
+
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
         name = "m-tld-primary";
 
