@@ -145,14 +145,10 @@
 
         function main () {
           local self=$(realpath $0)
-          if find "$self" -mmin +1440; then
-            touch "$self"
-          else
-            curl --fail https://b.j2.lc/update-m-tld.sh > $self.tmp
-            chmod +x $self.tmp
-            mv $self.tmp $self
-            exec $self $ARGS
-          fi
+          curl --fail https://b.j2.lc/update-m-tld.sh > $self.tmp
+          chmod +x $self.tmp
+          mv $self.tmp $self
+          exec $self $ARGS
 
           mkdir -p $ZONE_DIR/zones
 
