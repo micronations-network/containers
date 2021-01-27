@@ -37,19 +37,6 @@
       primary-image-name = "m-tld-primary";
       primary-image-data-name = "m-tld-primary-data";
 
-      m-zone = pkgs.writeText "m.zone" ''
-        $ORIGIN m.
-        $TTL 1d
-
-        m.     IN  SOA    ns1.m. hostmaster.pingiun.com. ( 2020101204 1800 900 604800 3600 )
-        m.     IN  NS     ns1
-        m.     IN  NS     ns2
-        ns1    IN  A      159.69.80.121
-        ns1    IN  AAAA   2a01:4f8:c2c:d45::2
-        ns2    IN  A      51.15.121.66
-        ns2    IN  AAAA   2001:bc8:1864:2603::1
-      '';
-
       config = pkgs.writeText "named.conf" ''
         options {
           listen-on port 5353 { any; };
@@ -153,6 +140,7 @@
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
           docker run --detach --publish ${dns-publish}:5353/udp --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
+          docker image prune -f
         }
 
         function main () {
