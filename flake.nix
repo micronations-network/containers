@@ -140,6 +140,7 @@
           docker stop ${container-name} && docker rm ${container-name} || true
           docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
           docker image prune -f
+          rm $tmpfile
         }
 
         function main () {
