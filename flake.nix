@@ -102,7 +102,7 @@
 
       packages.x86_64-linux.m-tld-update-script = let
         container-name = "m-tld-named";
-        dns-publish = "127.0.0.1:5353";
+        dns-publish = "53";
       in
       pkgs.writeScript "update-m-tld.sh" ''
         #! /usr/bin/env bash
