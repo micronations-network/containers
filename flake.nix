@@ -34,6 +34,9 @@
         )
       ];
 
+      primary-image-name = "m-tld-primary";
+      primary-image-data-name = "m-tld-primary-data";
+
       m-zone = pkgs.writeText "m.zone" ''
         $ORIGIN m.
         $TTL 1d
@@ -71,7 +74,9 @@
       '';
 
       startupScript = pkgs.writeShellScript "start" ''
-        /bin/named -c ${config} -fg
+        chown somebody:somebody .
+
+        exec /bin/gosu somebody -- $@
       '';
     in
     {
@@ -85,51 +90,92 @@
       hydraJobs.m-tld-update-script.x86_64-linux = self.packages.x86_64-linux.m-tld-update-script;
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
-        name = "m-tld-primary";
+        name = primary-image-name;
 
-        contents = [ pkgs.bind ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
+        contents = with pkgs; [ gosu bind ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
 
         runAsRoot = ''
           mkdir -p /state
           mkdir -p /var/run/named
 
-          chown 999:999 /state
-          chown 999:999 /var/run/named
+          chown somebody:somebody /var/run/named
 
           /bin/named-checkconf ${config}
         '';
 
         config = {
           EntryPoint = [ startupScript ];
-          User = "somebody";
-          Volumes = {
-            "/state" = {};
-          };
+          Cmd = [ "/bin/named" "-c" "${config}" "-fg" ];
+          WorkDir = "/state";
         };
       };
 
-      packages.x86_64-linux.m-tld-update-script = pkgs.writeScript "update-m-tld.sh" ''
+      packages.x86_64-linux.m-tld-update-script = let
+        container-name = "m-tld-named";
+        dns-publish = "127.0.0.1:5353";
+      in
+      pkgs.writeScript "update-m-tld.sh" ''
         #! /usr/bin/env bash
+
+        set -euo pipefail
+        set -x
 
         if [[ $# -ne 1 ]]; then
           echo >&2 "First argument should be the zone directory"
           exit 1
         fi
 
-        function updateContainer () {
-
-        }
-
         zone_dir=$1
 
-        mkdir -p $zone_dir
+        for cmd in jq curl sed cut docker; do
+          if ! command -v $cmd &> /dev/null; then
+              echo "$cmd should be installed"
+              exit 1
+          fi
+        done
 
-        curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $zone_dir/m.zone
+        function getLatest () {
+          set -e
+          curl --fail -L -H 'Accept: application/json' 'https://hydra.pingiun.com/job/micronet/containers/m-tld-primary.x86_64-linux/latest-finished'
+        }
 
-        old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}')
-        if [[ $? != 0 ]]; then
-          curl -i -H 'Accept: application/json'
-        fi
+
+        function updateContainer () {
+          set -e
+          local latest_finished=$1
+          local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
+          local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
+          local tmpfile=$(mktemp)
+          NIX_REMOTE=https://hydra.pingiun.com/ nix cat-store "$store_path" > "$tmpfile"
+          docker load < "$tmpfile"
+          docker stop ${container-name} && docker rm ${container-name} || true
+          docker run --detach --publish ${dns-publish}:5353 --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
+        }
+
+        function main () {
+          mkdir -p $zone_dir
+
+          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $zone_dir/m.zone
+
+          set +e
+          old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}' | cut -d ':' -f 2)
+          retval=$?
+          set -e
+          if (( retval > 0 )); then
+            updateContainer $(getLatest)
+            exit 0
+          fi
+
+          local latest_finished=$(getLatest)
+          local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
+          local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
+          if [[ "$old_version" != "$new_version" ]]; then
+            updateContainer latest_finished
+            exit 0
+          fi
+        }
+
+        main
       '';
 
     };
