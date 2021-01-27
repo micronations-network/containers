@@ -61,7 +61,7 @@
       '';
 
       startupScript = pkgs.writeShellScript "start" ''
-        chown somebody:somebody .
+        chown somebody:somebody /state
 
         exec /bin/gosu somebody $@
       '';

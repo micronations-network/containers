@@ -13,7 +13,7 @@ Download the latest update script, you can find it on the hydra server but it's 
 Place it in a useful place and then add the following line to your crontab:
 
 ```cron
-*/30 * * * * /usr/local/bin/update-m-tld.sh
+*/30 * * * * /usr/local/bin/update-m-tld.sh /var/lib/zones
 ```
 
 The user running the script should have access to docker, and the `jq` and `curl` programs should be installed.
