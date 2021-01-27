@@ -37,33 +37,32 @@
       primary-image-name = "m-tld-primary";
       primary-image-data-name = "m-tld-primary-data";
 
-      config = pkgs.writeText "named.conf" ''
-        options {
-          listen-on port 5353 { any; };
-          listen-on-v6 port 5353 { any; };
-          allow-query { any; };
-          version "[hidden]";
-          recursion no;
-          edns-udp-size 4096;
-          directory "/state";
-          dnssec-validation yes;
-          disable-empty-zone ".";
-        };
+      config = pkgs.writeText "nsd.conf" ''
+        server:
+          zonesdir: "/state/zones"
+          database: ""
+          hide-version: yes
+          identity: ""
+          username: somebody
+          pidfile: ""
+          xfrdfile: "/state/xfrd.state"
+          verbosity: 2
 
-        controls { };
+        remote-control:
+          control-enable: yes
+          control-interface: /tmp/control
 
-        zone "m" {
-          type primary;
-          file "m.zone";
-          allow-transfer { any; };
-          notify yes;
-        };
+        zone:
+          name: m
+          zonefile: "m.zone"
       '';
 
       startupScript = pkgs.writeShellScript "start" ''
         chown somebody:somebody /state
+        mkdir -p /state/zones
+        chown somebody:somebody /state/zones
 
-        exec /bin/gosu somebody $@
+        $@
       '';
     in
     {
@@ -79,20 +78,19 @@
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
         name = primary-image-name;
 
-        contents = with pkgs; [ coreutils gosu bind ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
+        contents = with pkgs; [ coreutils nsd ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
 
         runAsRoot = ''
-          mkdir -p /state
-          mkdir -p /var/run/named
+          mkdir -p /state/zones
+          mkdir -p /tmp
+          chown somebody:somebody /tmp
 
-          chown somebody:somebody /var/run/named
-
-          /bin/named-checkconf ${config}
+          /bin/nsd-checkconf ${config}
         '';
 
         config = {
           EntryPoint = [ startupScript ];
-          Cmd = [ "/bin/named" "-c" "${config}" "-fg" ];
+          Cmd = [ "/bin/nsd" "-d" "-p" "5353" "-c" "${config}" ];
           WorkDir = "/state";
           ExposedPorts = {
             "5353/udp" = {};
@@ -144,9 +142,11 @@
         }
 
         function main () {
-          mkdir -p $zone_dir
+          mkdir -p $zone_dir/zones
 
-          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $zone_dir/m.zone
+          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $zone_dir/zones/m.zone.tmp
+          docker exec ${container-name} /bin/nsd-checkzone m /state/zones/m.zone.tmp
+          docker exec ${container-name} /bin/mv /state/zones/m.zone.tmp /state/zones/m.zone
 
           set +e
           old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}' | cut -d ':' -f 2)
@@ -164,6 +164,7 @@
             updateContainer "$latest_finished"
             exit 0
           fi
+          docker exec ${container-name} /bin/nsd-control -c ${config} reload
         }
 
         main
