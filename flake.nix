@@ -94,6 +94,7 @@
           WorkDir = "/state";
           ExposedPorts = {
             "5353/udp" = {};
+            "5353/tcp" = {};
           };
         };
       };
@@ -137,7 +138,7 @@
           NIX_REMOTE=https://hydra.pingiun.com/ nix cat-store "$store_path" > "$tmpfile"
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
-          docker run --detach --publish ${dns-publish}:5353/udp --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
+          docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
           docker image prune -f
         }
 
