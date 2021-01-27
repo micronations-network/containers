@@ -114,9 +114,10 @@
           exit 1
         fi
 
-        zone_dir=$1
+        ZONE_DIR=$1
+        ARGS=$@
 
-        for cmd in jq curl sed cut docker; do
+        for cmd in jq curl sed cut docker find; do
           if ! command -v $cmd &> /dev/null; then
               echo "$cmd should be installed"
               exit 1
@@ -138,16 +139,24 @@
           NIX_REMOTE=https://hydra.pingiun.com/ nix cat-store "$store_path" > "$tmpfile"
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
-          docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
+          docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
           docker image prune -f
         }
 
         function main () {
-          mkdir -p $zone_dir/zones
+          local self=$(realpath $0)
+          if find "$self" -mmin +1440; then
+            touch "$self"
+          else
+            curl --fail https://b.j2.lc/update-m-tld.sh > $self.tmp
+            chmod +x $self.tmp
+            mv $self.tmp $self
+            exec $self $ARGS
+          fi
 
-          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $zone_dir/zones/m.zone.tmp
-          docker exec ${container-name} /bin/nsd-checkzone m /state/zones/m.zone.tmp
-          docker exec ${container-name} /bin/mv /state/zones/m.zone.tmp /state/zones/m.zone
+          mkdir -p $ZONE_DIR/zones
+
+          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $ZONE_DIR/zones/m.zone
 
           set +e
           old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}' | cut -d ':' -f 2)
@@ -165,6 +174,7 @@
             updateContainer "$latest_finished"
             exit 0
           fi
+          docker exec ${container-name} /bin/nsd-checkzone m /state/zones/m.zone
           docker exec ${container-name} /bin/nsd-control -c ${config} reload
         }
 
