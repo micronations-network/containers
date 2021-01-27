@@ -67,13 +67,14 @@
     in
     {
 
-      defaultPackage.x86_64-linux = with self.packages.x86_64-linux; pkgs.linkFarmFromDrvs "m-tld-config" [
-        m-tld-primary
-        m-tld-update-script
-      ];
+      defaultPackage.x86_64-linux = pkgs.linkFarmFromDrvs "m-tld-config" (
+        builtins.attrValues self.packages.x86_64-linux
+      );
 
-      hydraJobs.m-tld-primary.x86_64-linux = self.packages.x86_64-linux.m-tld-primary;
-      hydraJobs.m-tld-update-script.x86_64-linux = self.packages.x86_64-linux.m-tld-update-script;
+      hydraJobs = pkgs.lib.attrsets.mapAttrs' (name: value: {
+        inherit name;
+        value = { x86_64-linux = value; };
+      }) self.packages.x86_64-linux;
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
         name = primary-image-name;
