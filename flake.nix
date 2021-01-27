@@ -92,7 +92,7 @@
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
         name = primary-image-name;
 
-        contents = with pkgs; [ gosu bind ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
+        contents = with pkgs; [ coreutils gosu bind ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
 
         runAsRoot = ''
           mkdir -p /state
@@ -107,6 +107,9 @@
           EntryPoint = [ startupScript ];
           Cmd = [ "/bin/named" "-c" "${config}" "-fg" ];
           WorkDir = "/state";
+          ExposedPorts = {
+            "5353/udp" = {};
+          };
         };
       };
 
@@ -149,7 +152,7 @@
           NIX_REMOTE=https://hydra.pingiun.com/ nix cat-store "$store_path" > "$tmpfile"
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
-          docker run --detach --publish ${dns-publish}:5353 --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
+          docker run --detach --publish ${dns-publish}:5353/udp --volume "$zone_dir:/state" --name ${container-name} ${primary-image-name}:$new_version
         }
 
         function main () {
@@ -170,7 +173,7 @@
           local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
           local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
           if [[ "$old_version" != "$new_version" ]]; then
-            updateContainer latest_finished
+            updateContainer "$latest_finished"
             exit 0
           fi
         }
