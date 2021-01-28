@@ -85,12 +85,14 @@
 
       hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { script = self.packages.x86_64-linux.m-tld-update-script; } ''
         mkdir -p $out/nix-support
-        echo "file script $script/bin/update-m-tld.sh" >> $out/nix-support/hydra-build-products
+        cp $script/bin/update-m-tld.sh $out/update-m-tld.sh
+        echo "file script $out/update-m-tld.sh" >> $out/nix-support/hydra-build-products
       '';
 
       hydraJobs.primary-container.x86_64-linux = pkgs.runCommand "primary-container" { container = self.packages.x86_64-linux.m-tld-primary; } ''
         mkdir -p $out/nix-support
-        echo "file container $container" >> $out/nix-support/hydra-build-products
+        cp $container $out/m-tld-primary.tar.gz
+        echo "file container $out/m-tld-primary.tar.gz" >> $out/nix-support/hydra-build-products
       '';
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
