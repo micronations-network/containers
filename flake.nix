@@ -84,10 +84,10 @@
 
       hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-update-script; } ''
         mkdir -p $out/nix-support
-        echo "file script $out" >> $out/nix-support/hydra-build-products
+        echo "file script $out/bin/update-m-tld.sh" >> $out/nix-support/hydra-build-products
       '';
 
-      hydraJobs.m-tld-primary.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-primary; } ''
+      hydraJobs.primary-container.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-primary; } ''
         mkdir -p $out/nix-support
         echo "file container $out" >> $out/nix-support/hydra-build-products
       '';
@@ -152,7 +152,7 @@
           local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
           local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
           local tmpfile=$(mktemp)
-          NIX_REMOTE=https://hydra.pingiun.com/ nix cat-store "$store_path" > "$tmpfile"
+          curl --fail 'https://hydra.pingiun.com/job/micronet/containers/m-tld-primary.x86_64-linux/latest/download-by-type/file/container' > "$tmpfile"
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
           docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
