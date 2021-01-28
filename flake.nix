@@ -82,14 +82,14 @@
         ];
       };
 
-      hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-update-script; } ''
+      hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { pkg = self.packages.x86_64-linux.m-tld-update-script; } ''
         mkdir -p $out/nix-support
-        echo "file script $out/bin/update-m-tld.sh" >> $out/nix-support/hydra-build-products
+        echo "file script $pkg/bin/update-m-tld.sh" >> $out/nix-support/hydra-build-products
       '';
 
-      hydraJobs.primary-container.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-primary; } ''
+      hydraJobs.primary-container.x86_64-linux = pkgs.runCommand "update-script" { pkg = self.packages.x86_64-linux.m-tld-primary; } ''
         mkdir -p $out/nix-support
-        echo "file container $out" >> $out/nix-support/hydra-build-products
+        echo "file container $pkg" >> $out/nix-support/hydra-build-products
       '';
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
