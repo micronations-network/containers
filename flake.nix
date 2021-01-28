@@ -85,7 +85,7 @@
 
       hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { script = self.packages.x86_64-linux.m-tld-update-script; } ''
         mkdir -p $out/nix-support
-        cp $script/bin/update-m-tld.sh $out/update-m-tld.sh
+        cp $script $out/update-m-tld.sh
         echo "file script $out/update-m-tld.sh" >> $out/nix-support/hydra-build-products
       '';
 
