@@ -64,6 +64,8 @@
 
         $@
       '';
+
+      hydraJob = pkgs.lib.hydraJob;
     in
     {
 
@@ -73,7 +75,7 @@
 
       hydraJobs = pkgs.lib.attrsets.mapAttrs' (name: value: {
         inherit name;
-        value = { x86_64-linux = value; };
+        value = { x86_64-linux = hydraJob value; };
       }) self.packages.x86_64-linux;
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
