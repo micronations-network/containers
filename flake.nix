@@ -73,10 +73,24 @@
         builtins.attrValues self.packages.x86_64-linux
       );
 
-      hydraJobs = pkgs.lib.attrsets.mapAttrs' (name: value: {
-        inherit name;
-        value = { x86_64-linux = hydraJob value; };
-      }) self.packages.x86_64-linux;
+      hydraJobs.aggregate.x86_64-linux = pkgs.releaseTools.aggregate {
+        name = "micronet-dns";
+
+        constituents = with self.packages.x86_64-linux; [
+          m-tld-primary
+          m-tld-update-script
+        ];
+      };
+
+      hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-update-script; } ''
+        mkdir -p $out/nix-support
+        echo "file script $out" >> $out/nix-support/hydra-build-products
+      '';
+
+      hydraJobs.update-script.x86_64-linux = pkgs.runCommand "update-script" { out = self.packages.x86_64-linux.m-tld-primary; } ''
+        mkdir -p $out/nix-support
+        echo "file container $out" >> $out/nix-support/hydra-build-products
+      '';
 
       packages.x86_64-linux.m-tld-primary = pkgs.dockerTools.buildImage {
         name = primary-image-name;
