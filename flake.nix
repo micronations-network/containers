@@ -6,6 +6,14 @@
       pkgs = import nixpkgs {
         # It only makes sense to build on linux
         system = "x86_64-linux";
+        overlays = [
+          (self: super: {
+            unbound = super.unbound.overrideAttrs (oldAttrs: {
+              buildInputs = oldAttrs.buildInputs ++ [ self.nghttp2 ];
+              configureFlags = oldAttrs.configureFlags ++ [ "--with-libnghttp2=${self.nghttp2.dev}" ];
+            });
+          })
+        ];
       };
       nonRootShadowSetup = { user, uid, gid ? uid }: with pkgs; [
         (
@@ -36,6 +44,7 @@
 
       primary-image-name = "m-tld-primary";
       primary-image-data-name = "m-tld-primary-data";
+      recursive-image-name = "m-tld-recursive";
 
       config = pkgs.writeText "nsd.conf" ''
         server:
@@ -119,6 +128,27 @@
         };
       };
 
+      packages.x86_64-linux.m-tld-recursive = pkgs.dockerTools.buildImage {
+        name = recursive-image-name;
+
+        contents = with pkgs; [ unbound ] ++ nonRootShadowSetup { uid = 999; user = "somebody"; };
+
+        runAsRoot = ''
+          mkdir -p /state
+          mkdir -p /tmp
+          chown somebody:somebody /tmp
+        '';
+
+        config = {
+          EntryPoint = [ "/bin/unbound" ];
+          WorkDir = "/state";
+          ExposedPorts = {
+            "53/udp" = {};
+            "53/tcp" = {};
+          };
+        };
+      };
+
       packages.x86_64-linux.m-tld-update-script = let
         container-name = "m-tld-named";
         dns-publish = "53";
@@ -145,7 +175,7 @@
 
         function getLatest () {
           set -e
-          curl --fail -L -H 'Accept: application/json' 'https://hydra.pingiun.com/job/micronet/containers/m-tld-primary.x86_64-linux/latest-finished'
+          curl --fail -L -H 'Accept: application/json' 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest-finished'
         }
 
 
@@ -155,7 +185,7 @@
           local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
           local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
           local tmpfile=$(mktemp)
-          curl --fail 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest/download-by-type/file/container' > "$tmpfile"
+          curl --fail -L 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest/download-by-type/file/container' > "$tmpfile"
           docker load < "$tmpfile"
           docker stop ${container-name} && docker rm ${container-name} || true
           docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
