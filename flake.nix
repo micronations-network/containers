@@ -15,30 +15,31 @@
           })
         ];
       };
+      lib = pkgs.lib;
       nonRootShadowSetup = { user, uid, gid ? uid }: with pkgs; [
         (
-        writeTextDir "etc/shadow" ''
-          root:!x:::::::
-          ${user}:!:::::::
-        ''
+          writeTextDir "etc/shadow" ''
+            root:!x:::::::
+            ${user}:!:::::::
+          ''
         )
         (
-        writeTextDir "etc/passwd" ''
-          root:x:0:0::/root:${runtimeShell}
-          ${user}:x:${toString uid}:${toString gid}::/home/${user}:
-        ''
+          writeTextDir "etc/passwd" ''
+            root:x:0:0::/root:${runtimeShell}
+            ${user}:x:${toString uid}:${toString gid}::/home/${user}:
+          ''
         )
         (
-        writeTextDir "etc/group" ''
-          root:x:0:
-          ${user}:x:${toString gid}:
-        ''
+          writeTextDir "etc/group" ''
+            root:x:0:
+            ${user}:x:${toString gid}:
+          ''
         )
         (
-        writeTextDir "etc/gshadow" ''
-          root:x::
-          ${user}:x::
-        ''
+          writeTextDir "etc/gshadow" ''
+            root:x::
+            ${user}:x::
+          ''
         )
       ];
 
@@ -98,7 +99,7 @@
         echo "file script $out/update-m-tld.sh" >> $out/nix-support/hydra-build-products
       '';
 
-      hydraJobs.primary-container.x86_64-linux = pkgs.runCommand "primary-container" { container = self.packages.x86_64-linux.m-tld-primary; } ''
+      hydraJobs.primary-container.x86_64-linux = pkgs.runCommand (lib.concatStrings [ "primary-container-" (lib.head (lib.splitString "-" (lib.last (lib.splitString "/" (toString self.packages.x86_64-linux.m-tld-primary))))) ]) { container = self.packages.x86_64-linux.m-tld-primary; } ''
         mkdir -p $out/nix-support
         cp $container $out/m-tld-primary.tar.gz
         echo "file container $out/m-tld-primary.tar.gz" >> $out/nix-support/hydra-build-products
@@ -122,8 +123,8 @@
           Cmd = [ "/bin/nsd" "-d" "-p" "5353" "-c" "${config}" ];
           WorkDir = "/state";
           ExposedPorts = {
-            "5353/udp" = {};
-            "5353/tcp" = {};
+            "5353/udp" = { };
+            "5353/tcp" = { };
           };
         };
       };
@@ -143,83 +144,84 @@
           EntryPoint = [ "/bin/unbound" ];
           WorkDir = "/state";
           ExposedPorts = {
-            "53/udp" = {};
-            "53/tcp" = {};
+            "53/udp" = { };
+            "53/tcp" = { };
           };
         };
       };
 
-      packages.x86_64-linux.m-tld-update-script = let
-        container-name = "m-tld-named";
-        dns-publish = "53";
-      in
-      pkgs.writeScript "update-m-tld.sh" ''
-        #! /usr/bin/env bash
+      packages.x86_64-linux.m-tld-update-script =
+        let
+          container-name = "m-tld-named";
+          dns-publish = "53";
+        in
+        pkgs.writeScript "update-m-tld.sh" ''
+          #! /usr/bin/env bash
 
-        set -euo pipefail
-        set -x
+          set -euo pipefail
+          set -x
 
-        if [[ $# -ne 1 ]]; then
-          echo >&2 "First argument should be the zone directory"
-          exit 1
-        fi
-
-        ZONE_DIR=$1
-
-        for cmd in jq curl sed cut docker find; do
-          if ! command -v $cmd &> /dev/null; then
-              echo "$cmd should be installed"
-              exit 1
-          fi
-        done
-
-        function getLatest () {
-          set -e
-          curl --fail -L -H 'Accept: application/json' 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest-finished'
-        }
-
-
-        function updateContainer () {
-          set -e
-          local latest_finished=$1
-          local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
-          local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
-          local tmpfile=$(mktemp)
-          curl --fail -L 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest/download-by-type/file/container' > "$tmpfile"
-          docker load < "$tmpfile"
-          docker stop ${container-name} && docker rm ${container-name} || true
-          docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
-          docker image prune -f
-          rm $tmpfile
-        }
-
-        function main () {
-          mkdir -p $ZONE_DIR/zones
-
-          curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $ZONE_DIR/zones/m.zone
-
-          set +e
-          old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}' | cut -d ':' -f 2)
-          retval=$?
-          set -e
-          if (( retval > 0 )); then
-            updateContainer $(getLatest)
-            exit 0
+          if [[ $# -ne 1 ]]; then
+            echo >&2 "First argument should be the zone directory"
+            exit 1
           fi
 
-          local latest_finished=$(getLatest)
-          local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
-          local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 1)
-          if [[ "$old_version" != "$new_version" ]]; then
-            updateContainer "$latest_finished"
-            exit 0
-          fi
-          docker exec ${container-name} /bin/nsd-checkzone m /state/zones/m.zone
-          docker exec ${container-name} /bin/nsd-control -c ${config} reload
-        }
+          ZONE_DIR=$1
 
-        main
-      '';
+          for cmd in jq curl sed cut docker find; do
+            if ! command -v $cmd &> /dev/null; then
+                echo "$cmd should be installed"
+                exit 1
+            fi
+          done
+
+          function getLatest () {
+            set -e
+            curl --fail -L -H 'Accept: application/json' 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest-finished'
+          }
+
+
+          function updateContainer () {
+            set -e
+            local latest_finished=$1
+            local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
+            local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 4)
+            local tmpfile=$(mktemp)
+            curl --fail -L 'https://hydra.pingiun.com/job/micronet/containers/primary-container.x86_64-linux/latest/download-by-type/file/container' > "$tmpfile"
+            docker load < "$tmpfile"
+            docker stop ${container-name} && docker rm ${container-name} || true
+            docker run --detach --publish ${dns-publish}:5353/udp --publish ${dns-publish}:5353/tcp --volume "$ZONE_DIR:/state" --name ${container-name} ${primary-image-name}:$new_version
+            docker image prune -f
+            rm $tmpfile
+          }
+
+          function main () {
+            mkdir -p $ZONE_DIR/zones
+
+            curl 'https://raw.githubusercontent.com/micronations-network/registry/main/m.zone' > $ZONE_DIR/zones/m.zone
+
+            set +e
+            old_version=$(docker inspect m-tld-named --format '{{.Config.Image}}' | cut -d ':' -f 2)
+            retval=$?
+            set -e
+            if (( retval > 0 )); then
+              updateContainer $(getLatest)
+              exit 0
+            fi
+
+            local latest_finished=$(getLatest)
+            local store_path=$(echo "$latest_finished" | jq -r '.buildoutputs.out.path')
+            local new_version=$(echo "$store_path" | sed 's|/nix/store/||' | cut -d '-' -f 4)
+            if [[ "$old_version" != "$new_version" ]]; then
+              updateContainer "$latest_finished"
+              exit 0
+            fi
+            docker exec ${container-name} /bin/nsd-checkzone m /state/zones/m.zone
+            docker exec ${container-name} /bin/nsd-control -c ${config} reload
+          }
+
+          main
+        '';
 
     };
 }
